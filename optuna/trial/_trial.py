@@ -60,7 +60,7 @@ class Trial(BaseTrial):
 
         self.storage = self.study._storage
 
-        self._cached_frozen_trial = self.storage.get_trial(self._trial_id)
+        self._cached_frozen_trial = copy.deepcopy(self.storage.get_trial(self._trial_id))
         study = pruners._filter_study(self.study, self._cached_frozen_trial)
 
         self.study.sampler.before_trial(study, self._cached_frozen_trial)

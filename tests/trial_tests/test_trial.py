@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 from typing import Any
 from typing import TYPE_CHECKING
@@ -761,3 +762,34 @@ def test_before_trial() -> None:
         lambda t: [t.suggest_float("y", -3, 3), t.suggest_int("x", 0, 10)], n_trials=n_trials
     )
     assert n_calls == n_trials
+
+
+@pytest.mark.parametrize("storage_mode", STORAGE_MODES)
+@pytest.mark.parametrize("operation", ["report", "user_attr", "suggest", "constraint"])
+def test_trial_writes_do_not_modify_storage_snapshot(storage_mode: str, operation: str) -> None:
+    with StorageSupplier(storage_mode) as storage:
+        study = create_study(storage=storage)
+        trial = study.ask()
+        snapshot = study.get_trials(deepcopy=False)[0]
+        original = copy.deepcopy(snapshot)
+
+        if operation == "report":
+            trial.report(1.25, 0)
+            with pytest.warns(UserWarning, match="already reported"):
+                trial.report(9.0, 0)
+            assert study.get_trials()[0].intermediate_values == {0: 1.25}
+        elif operation == "user_attr":
+            trial.set_user_attr("label", "new")
+            assert trial.user_attrs == {"label": "new"}
+            assert study.get_trials()[0].user_attrs == trial.user_attrs
+        elif operation == "suggest":
+            assert trial.suggest_float("x", 0.25, 0.25) == 0.25
+            assert trial.params == {"x": 0.25}
+            assert study.get_trials()[0].params == trial.params
+            assert study.get_trials()[0].distributions == trial.distributions
+        else:
+            trial.set_constraint("limit", 0.5)
+            assert trial.constraints == {"limit": 0.5}
+            assert study.get_trials()[0].constraints == trial.constraints
+
+        assert snapshot == original
