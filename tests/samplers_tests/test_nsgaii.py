@@ -1122,3 +1122,47 @@ def test_crossover_deterministic(
     rng.normal = Mock(side_effect=_normal)
     child_params = crossover.crossover(parent_params, rng, study, numerical_transform.bounds)
     np.testing.assert_almost_equal(child_params, expected_params)
+
+
+@pytest.mark.parametrize(
+    "n_dimensions,sigmas",
+    [
+        (1, None),
+        (1, (0.3, 0.7)),
+        (2, None),
+        (2, (0.3, 0.7)),
+        (2, (0.0, 0.0)),
+        (2, (0.3, 0.0)),
+        (2, (0.0, 0.7)),
+        (2, (1.0, 1.0)),
+        (2, (-0.3, 0.7)),
+        (2, (0.3, -0.7)),
+        (2, (-0.3, -0.7)),
+    ],
+)
+def test_undx_crossover_normal_scales(
+    n_dimensions: int, sigmas: tuple[float, float] | None
+) -> None:
+    if sigmas is None:
+        crossover = UNDXCrossover()
+        sigma_xi, sigma_eta = 0.5, 0.35 / np.sqrt(n_dimensions)
+    else:
+        sigma_xi, sigma_eta = sigmas
+        crossover = UNDXCrossover(sigma_xi=sigma_xi, sigma_eta=sigma_eta)
+
+    parents = np.array([[-1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])[:, :n_dimensions]
+    bounds = np.array([[-10.0, 10.0]] * n_dimensions)
+    study = optuna.create_study()
+    rng = np.random.RandomState(0)
+    child = crossover.crossover(parents, rng, study, bounds)
+
+    # The midpoint is the origin and the primary direction is (-2, 0).
+    # In 2D, the orthogonal direction is (0, 1) and the third parent's distance is 1.
+    expected_rng = np.random.RandomState(0)
+    etas = expected_rng.normal(size=n_dimensions)
+    xi = expected_rng.normal()
+    expected = np.array([-2 * abs(sigma_xi) * xi, abs(sigma_eta) * etas[0]])
+    np.testing.assert_allclose(child, expected[:n_dimensions], rtol=1e-14, atol=1e-15)
+
+    # Keep the same draws, including the unused eta in one dimension.
+    np.testing.assert_equal(rng.get_state(), expected_rng.get_state())
