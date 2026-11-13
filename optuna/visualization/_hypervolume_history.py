@@ -106,6 +106,11 @@ def _get_hypervolume_history_info(
     for trial in completed_trials:
         trial_numbers.append(trial.number)
 
+        if np.isinf(hypervolume):
+            # Adding trials cannot decrease the hypervolume. Avoid inf - inf below.
+            hypervolume_values.append(hypervolume)
+            continue
+
         if any(x > 0.0 for x in trial.constraints.values()):
             # The trial is infeasible.
             hypervolume_values.append(hypervolume)

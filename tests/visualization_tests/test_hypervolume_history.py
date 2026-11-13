@@ -8,6 +8,7 @@ import pytest
 
 from optuna.samplers import NSGAIISampler
 from optuna.study import create_study
+from optuna.trial import create_trial
 from optuna.trial import Trial
 from optuna.visualization._hypervolume_history import _get_hypervolume_history_info
 from optuna.visualization._hypervolume_history import _HypervolumeHistoryInfo
@@ -59,3 +60,22 @@ def test_get_optimization_history_info(
     assert info == _HypervolumeHistoryInfo(
         trial_numbers=[0, 1, 2, 3, 4, 5], values=[0.0, 0.0625, 0.0625, 0.25, 0.3125, 1.0]
     )
+
+
+@pytest.mark.parametrize("direction", ["minimize", "maximize"])
+@pytest.mark.parametrize("infinite_reference", [False, True])
+def test_hypervolume_history_preserves_infinite_volume(
+    direction: Literal["minimize", "maximize"], infinite_reference: bool
+) -> None:
+    sign = 1 if direction == "minimize" else -1
+    study = create_study(directions=[direction, direction])
+    first_coordinate = 0.0 if infinite_reference else -float("inf")
+    values = [[first_coordinate, 0.0], [first_coordinate, -1.0], [0.5, -2.0]]
+    for value in values:
+        study.add_trial(create_trial(values=[sign * x for x in value]))
+    reference_point = sign * np.array([float("inf") if infinite_reference else 1.0, 1.0])
+
+    with np.errstate(invalid="raise"):
+        info = _get_hypervolume_history_info(study, reference_point)
+
+    assert info == _HypervolumeHistoryInfo(trial_numbers=[0, 1, 2], values=[float("inf")] * 3)
